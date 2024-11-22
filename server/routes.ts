@@ -1,26 +1,43 @@
-import type { Express } from "express";
+import type { Express, Request } from "express";
 import OpenAI from "openai";
 import multer from "multer";
 
-const upload = multer({ storage: multer.memoryStorage() });
+// Extend Express Request type to include multer's file property
+interface MulterRequest extends Request {
+  file?: Express.Multer.File;
+}
+
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  }
+});
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export function registerRoutes(app: Express) {
-  app.post("/api/transcribe", upload.single("audio"), async (req, res) => {
+  app.post("/api/transcribe", upload.single("audio"), async (req: MulterRequest, res) => {
     try {
-      if (!req.file) {
+      if (!req.file || !req.file.buffer) {
         return res.status(400).json({ error: "No audio file provided" });
       }
 
+      // Create a Blob-like object from the buffer
+      const audioFile = new Blob([req.file.buffer], { type: req.file.mimetype });
+
       const transcription = await openai.audio.transcriptions.create({
-        file: req.file.buffer,
+        file: audioFile,
         model: "whisper-1",
       });
 
       res.json({ text: transcription.text });
     } catch (error) {
       console.error("Transcription error:", error);
-      res.status(500).json({ error: "Failed to transcribe audio" });
+      if (error instanceof Error) {
+        res.status(500).json({ error: error.message });
+      } else {
+        res.status(500).json({ error: "Failed to transcribe audio" });
+      }
     }
   });
 
@@ -43,7 +60,11 @@ export function registerRoutes(app: Express) {
         response_format: { type: "json_object" },
       });
 
-      const analysis = JSON.parse(response.choices[0].message.content);
+      const content = response.choices[0].message.content;
+      if (!content) {
+        throw new Error("No content in OpenAI response");
+      }
+      const analysis = JSON.parse(content);
       res.json(analysis);
     } catch (error) {
       console.error("Analysis error:", error);
