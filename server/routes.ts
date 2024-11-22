@@ -22,12 +22,17 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ error: "No audio file provided" });
       }
 
-      // Create a Blob-like object from the buffer
-      const audioFile = new Blob([req.file.buffer], { type: req.file.mimetype });
+      // Create a File object from the buffer that's compatible with OpenAI's API
+      const audioFile = new File(
+        [req.file.buffer],
+        'audio.webm',
+        { type: req.file.mimetype }
+      );
 
       const transcription = await openai.audio.transcriptions.create({
         file: audioFile,
         model: "whisper-1",
+        response_format: "json",
       });
 
       res.json({ text: transcription.text });

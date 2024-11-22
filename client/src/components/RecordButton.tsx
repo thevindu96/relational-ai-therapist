@@ -15,10 +15,20 @@ export default function RecordButton({
   onTranscript,
   onAnalysis,
 }: RecordButtonProps) {
-  const { startRecording, stopRecording } = useAudioRecording({
+  const { startRecording, stopRecording, error } = useAudioRecording({
     onTranscript,
     onAnalysis,
   });
+
+  useEffect(() => {
+    if (error) {
+      toast({
+        variant: "destructive",
+        title: "Recording Error",
+        description: error,
+      });
+    }
+  }, [error]);
 
   return (
     <div className="fixed bottom-8 left-1/2 -translate-x-1/2">
