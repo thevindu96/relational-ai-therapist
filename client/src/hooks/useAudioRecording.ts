@@ -1,4 +1,12 @@
 import { useState, useCallback } from "react";
+// Define proper type for MediaRecorder error event
+interface MediaRecorderErrorEvent {
+  type: string;
+  error: {
+    name: string;
+    message: string;
+  };
+}
 import { analyzeTranscript, transcribeAudio } from "../lib/api";
 
 interface UseAudioRecordingProps {
@@ -65,7 +73,7 @@ export function useAudioRecording({
       };
 
       // Error handling
-      recorder.onerror = (event) => {
+      recorder.onerror = (event: MediaRecorderErrorEvent) => {
         setError("Recording error: " + event.error.message);
         stopRecording();
       };
@@ -104,6 +112,7 @@ export function useAudioRecording({
   return {
     startRecording,
     stopRecording,
+    error,
   };
 }
 

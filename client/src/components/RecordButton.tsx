@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { useAudioRecording } from "../hooks/useAudioRecording";
 import { Button } from "@/components/ui/button";
 import { Mic, Square } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 interface RecordButtonProps {
   isRecording: boolean;
@@ -19,6 +21,7 @@ export default function RecordButton({
     onTranscript,
     onAnalysis,
   });
+  const { toast } = useToast();
 
   useEffect(() => {
     if (error) {
