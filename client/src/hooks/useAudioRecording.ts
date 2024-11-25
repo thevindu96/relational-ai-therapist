@@ -12,7 +12,7 @@ export function useAudioRecording({
 }: UseAudioRecordingProps) {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [lastProcessedText, setLastProcessedText] = useState<string>('');
+  const [allProcessedText, setAllProcessedText] = useState<string>('');
   const chunksRef = useRef<Blob[]>([]);
 
   const startRecording = useCallback(async () => {
@@ -64,20 +64,21 @@ export function useAudioRecording({
             const transcript = await transcribeAudio(audioBlob);
             
             if (transcript && transcript.text) {
-              const fullText = transcript.text;
-              // Get only the truly new content by comparing with last processed text
-              const newContent = fullText.replace(lastProcessedText, '').trim();
+              // Remove all previously processed text to get only new content
+              const newText = transcript.text
+                .substring(allProcessedText.length)
+                .trim();
               
-              if (newContent) {
-                console.debug('[Audio Recording] New content:', newContent);
-                const speaker = determineSpeaker(newContent);
-                onTranscript(newContent, speaker);
+              if (newText) {
+                console.debug('[Audio Recording] New text segment:', newText);
+                const speaker = determineSpeaker(newText);
+                onTranscript(newText, speaker);
                 
-                const analysis = await analyzeTranscript(newContent);
-                console.debug('[Audio Recording] Analysis received');
+                const analysis = await analyzeTranscript(newText);
                 onAnalysis(analysis);
                 
-                setLastProcessedText(fullText);
+                // Update all processed text
+                setAllProcessedText(transcript.text);
               }
             }
           } catch (error) {

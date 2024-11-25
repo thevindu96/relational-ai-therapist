@@ -75,6 +75,7 @@ export default function Home() {
             onStop={handleStopRecording}
             onRecordingStateChange={handleRecordingStateChange}
             onTranscript={(text, speaker) => {
+              // Each text received here should already be unique
               setConversation((prev) => [
                 ...prev,
                 { text, speaker, timestamp: Date.now() },
