@@ -24,24 +24,16 @@ export function useAudioRecording({
       });
       
       const recorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm',  // Simplified MIME type that's compatible with Whisper
+        mimeType: 'audio/webm',
         audioBitsPerSecond: 128000
       });
-
-      // Create audio chunks array outside the event handler
-      const chunks: Blob[] = [];
 
       recorder.ondataavailable = async (event) => {
         console.debug('[Audio Recording] Data chunk available:', event.data.size, 'bytes');
         if (event.data.size > 0) {
-          chunks.push(event.data);
-          
-          // Create a new blob from all chunks so far
-          const audioBlob = new Blob(chunks, { type: 'audio/webm' });
-          console.debug('[Audio Recording] Processing combined audio:', audioBlob.size, 'bytes');
-          
           try {
-            const transcript = await transcribeAudio(audioBlob);
+            // Process only the current chunk instead of accumulated chunks
+            const transcript = await transcribeAudio(event.data);
             console.debug('[Audio Recording] Transcript received:', transcript.text);
             
             if (transcript && transcript.text) {
@@ -59,7 +51,7 @@ export function useAudioRecording({
       };
 
       setMediaRecorder(recorder);
-      // Start recording with 3-second intervals for live transcription
+      // Send data every 3 seconds
       recorder.start(3000);
       console.debug('[Audio Recording] Started recording with live transcription');
       
