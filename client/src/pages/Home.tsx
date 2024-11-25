@@ -25,14 +25,17 @@ export default function Home() {
   }>>([]);
 
   const handleStartRecording = () => {
-    setIsRecording(true);
     setHasStartedSession(true);
     setConversation([]);
     setAnalysis([]);
   };
 
+  const handleRecordingStateChange = (recording: boolean) => {
+    setIsRecording(recording);
+  };
+
   const handleStopRecording = () => {
-    setIsRecording(false);
+    handleRecordingStateChange(false);
   };
 
   return (
@@ -52,7 +55,7 @@ export default function Home() {
             onClick={handleStartRecording}
             className="w-full py-6 text-lg bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
           >
-            Start Recording
+            Start
           </Button>
         </Card>
       ) : (

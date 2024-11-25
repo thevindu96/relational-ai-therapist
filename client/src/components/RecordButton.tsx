@@ -17,10 +17,19 @@ export default function RecordButton({
   onTranscript,
   onAnalysis,
 }: RecordButtonProps) {
-  const { startRecording, stopRecording, error } = useAudioRecording({
+  const { startRecording: startAudioRecording, stopRecording: stopAudioRecording, error } = useAudioRecording({
     onTranscript,
     onAnalysis,
   });
+
+  const handleStartRecording = async () => {
+    await startAudioRecording();
+  };
+
+  const handleStopRecording = () => {
+    stopAudioRecording();
+    onStop();
+  };
   const { toast } = useToast();
 
   useEffect(() => {
@@ -44,10 +53,7 @@ export default function RecordButton({
       <Button
         size="lg"
         variant={isRecording ? "destructive" : "default"}
-        onClick={isRecording ? () => {
-          stopRecording();
-          onStop();
-        } : startRecording}
+        onClick={isRecording ? handleStopRecording : handleStartRecording}
         className="h-16 px-8 rounded-full flex items-center gap-2"
       >
         {isRecording ? (
