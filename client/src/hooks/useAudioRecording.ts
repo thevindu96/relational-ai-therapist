@@ -24,17 +24,25 @@ export function useAudioRecording({
       });
       
       const recorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-          ? 'audio/webm;codecs=opus'
-          : 'audio/webm'
+        mimeType: 'audio/webm',  // Simplified MIME type that's compatible with Whisper
+        audioBitsPerSecond: 128000
       });
 
+      // Create audio chunks array outside the event handler
+      const chunks: Blob[] = [];
+
       recorder.ondataavailable = async (event) => {
-        console.debug('[Audio Recording] Data available:', event.data.size, 'bytes');
+        console.debug('[Audio Recording] Data chunk available:', event.data.size, 'bytes');
         if (event.data.size > 0) {
+          chunks.push(event.data);
+          
+          // Create a new blob from all chunks so far
+          const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+          console.debug('[Audio Recording] Processing combined audio:', audioBlob.size, 'bytes');
+          
           try {
-            const transcript = await transcribeAudio(event.data);
-            console.debug('[Audio Recording] Live transcript:', transcript.text);
+            const transcript = await transcribeAudio(audioBlob);
+            console.debug('[Audio Recording] Transcript received:', transcript.text);
             
             if (transcript && transcript.text) {
               const speaker = determineSpeaker(transcript.text);
@@ -44,8 +52,8 @@ export function useAudioRecording({
               onAnalysis(analysis);
             }
           } catch (error) {
-            console.error('[Audio Recording] Live transcription error:', error);
-            setError('Failed to transcribe audio chunk');
+            console.error('[Audio Recording] Transcription error:', error);
+            setError('Failed to transcribe audio');
           }
         }
       };
@@ -65,7 +73,7 @@ export function useAudioRecording({
     console.debug('[Audio Recording] Stopping recording');
     if (mediaRecorder?.state === 'recording') {
       mediaRecorder.stop();
-      // Cleanup
+      // Cleanup stream
       const tracks = mediaRecorder.stream.getTracks();
       tracks.forEach(track => track.stop());
     }
