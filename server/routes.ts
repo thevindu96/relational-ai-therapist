@@ -22,11 +22,12 @@ export function registerRoutes(app: Express) {
         return res.status(400).json({ error: "No audio file provided" });
       }
 
-      // Create a File object from the buffer that's compatible with OpenAI's API
+      console.debug('[Server] Received audio chunk:', req.file.mimetype, req.file.size);
+
       const audioFile = new File(
         [req.file.buffer],
         'audio.webm',
-        { type: req.file.mimetype }
+        { type: 'audio/webm' }
       );
 
       const transcription = await openai.audio.transcriptions.create({
@@ -35,14 +36,13 @@ export function registerRoutes(app: Express) {
         response_format: "json",
       });
 
+      console.debug('[Server] Transcription received:', transcription.text);
       res.json({ text: transcription.text });
     } catch (error) {
       console.error("Transcription error:", error);
-      if (error instanceof Error) {
-        res.status(500).json({ error: error.message });
-      } else {
-        res.status(500).json({ error: "Failed to transcribe audio" });
-      }
+      res.status(500).json({ 
+        error: error instanceof Error ? error.message : "Failed to transcribe audio"
+      });
     }
   });
 
