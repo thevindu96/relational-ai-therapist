@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { analyzeTranscript, transcribeAudio } from "../lib/api";
 
 interface UseAudioRecordingProps {
@@ -12,57 +12,89 @@ export function useAudioRecording({
 }: UseAudioRecordingProps) {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
   const startRecording = useCallback(async () => {
     console.debug('[Audio Recording] Starting new recording session');
     try {
+      console.debug('[Audio Recording] Checking browser compatibility and permissions');
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Browser does not support audio recording');
+      }
+
+      // Check permission status
+      const permissionStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+      console.debug('[Audio Recording] Permission status:', permissionStatus.state);
+
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
         }
       });
       
+      console.debug('[Audio Recording] Stream active:', stream.active);
+      console.debug('[Audio Recording] Permissions granted:', stream.getAudioTracks()[0].enabled);
+
+      // Reset chunks array
+      chunksRef.current = [];
+
+      console.debug('[Audio Recording] Initializing MediaRecorder');
       const recorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm',  // Simplified MIME type that's compatible with Whisper
+        mimeType: 'audio/webm',
         audioBitsPerSecond: 128000
       });
 
-      // Create audio chunks array outside the event handler
-      const chunks: Blob[] = [];
+      console.debug('[Audio Recording] MediaRecorder created:', recorder.state);
 
       recorder.ondataavailable = async (event) => {
-        console.debug('[Audio Recording] Data chunk available:', event.data.size, 'bytes');
+        console.debug('[Audio Recording] Data chunk received:', event.data.size);
         if (event.data.size > 0) {
-          chunks.push(event.data);
-          
-          // Create a new blob from all chunks so far
-          const audioBlob = new Blob(chunks, { type: 'audio/webm' });
-          console.debug('[Audio Recording] Processing combined audio:', audioBlob.size, 'bytes');
-          
+          chunksRef.current.push(event.data);
+          console.debug('[Audio Recording] Total chunks:', chunksRef.current.length);
+
+          // Process all accumulated chunks
+          const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+          console.debug('[Audio Recording] Processing audio size:', audioBlob.size);
+
           try {
             const transcript = await transcribeAudio(audioBlob);
-            console.debug('[Audio Recording] Transcript received:', transcript.text);
-            
+            console.debug('[Audio Recording] Transcript:', transcript.text);
+
             if (transcript && transcript.text) {
               const speaker = determineSpeaker(transcript.text);
               onTranscript(transcript.text, speaker);
-              
+
               const analysis = await analyzeTranscript(transcript.text);
+              console.debug('[Audio Recording] Analysis received');
               onAnalysis(analysis);
             }
           } catch (error) {
-            console.error('[Audio Recording] Transcription error:', error);
-            setError('Failed to transcribe audio');
+            console.error('[Audio Recording] Processing error:', error);
+            setError('Failed to process audio chunk');
           }
         }
       };
 
+      recorder.onstop = () => {
+        console.debug('[Audio Recording] Recording stopped, combining chunks');
+        const finalBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        console.debug('[Audio Recording] Final audio size:', finalBlob.size);
+      };
+
+      recorder.onerror = (event) => {
+        console.error('[Audio Recording] Recorder error:', event);
+        setError('Recording error occurred');
+      };
+
       setMediaRecorder(recorder);
-      // Start recording with 3-second intervals for live transcription
-      recorder.start(3000);
-      console.debug('[Audio Recording] Started recording with live transcription');
-      
+
+      console.debug('[Audio Recording] Recorder inactive, attempting to start');
+      recorder.start(3000); // Start with 3-second intervals
+      console.debug('[Audio Recording] Recording started successfully');
+
     } catch (error) {
       console.error('[Audio Recording] Setup error:', error);
       setError(error instanceof Error ? error.message : 'Failed to start recording');
@@ -71,11 +103,20 @@ export function useAudioRecording({
 
   const stopRecording = useCallback(() => {
     console.debug('[Audio Recording] Stopping recording');
-    if (mediaRecorder?.state === 'recording') {
-      mediaRecorder.stop();
-      // Cleanup stream
-      const tracks = mediaRecorder.stream.getTracks();
-      tracks.forEach(track => track.stop());
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      try {
+        mediaRecorder.stop();
+        const tracks = mediaRecorder.stream.getTracks();
+        tracks.forEach(track => {
+          track.stop();
+          console.debug('[Audio Recording] Track stopped:', track.kind);
+        });
+        // Clear chunks after stopping
+        chunksRef.current = [];
+      } catch (error) {
+        console.error('[Audio Recording] Stop error:', error);
+        setError('Failed to stop recording');
+      }
     }
   }, [mediaRecorder]);
 
