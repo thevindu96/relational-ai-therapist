@@ -24,16 +24,14 @@ export function useAudioRecording({
       });
       
       const recorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/wav') 
-          ? 'audio/wav' 
-          : 'audio/mp3'
+        mimeType: 'audio/webm;codecs=opus' // Use webm format which is widely supported
       });
 
       recorder.addEventListener('dataavailable', async (event) => {
         if (event.data?.size > 0) {
           try {
             const formData = new FormData();
-            formData.append('audio', event.data);
+            formData.append('audio', event.data, 'audio.webm');
             
             const response = await fetch('/api/transcribe', {
               method: 'POST',
@@ -67,7 +65,7 @@ export function useAudioRecording({
       });
 
       setMediaRecorder(recorder);
-      recorder.start(1000); // Send chunks every second for more frequent updates
+      recorder.start(2000); // Send chunks every 2 seconds for better processing
       console.debug('[Audio Recording] Started recording');
       
     } catch (error) {
