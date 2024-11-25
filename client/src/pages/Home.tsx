@@ -12,6 +12,7 @@ import {
 
 export default function Home() {
   const [isRecording, setIsRecording] = useState(false);
+  const [hasStartedSession, setHasStartedSession] = useState(false);
   const [conversation, setConversation] = useState<Array<{
     text: string;
     speaker: number;
@@ -25,6 +26,7 @@ export default function Home() {
 
   const handleStartRecording = () => {
     setIsRecording(true);
+    setHasStartedSession(true);
     setConversation([]);
     setAnalysis([]);
   };
@@ -35,7 +37,7 @@ export default function Home() {
 
   return (
     <div className="container mx-auto p-4 min-h-screen">
-      {!isRecording ? (
+      {!hasStartedSession ? (
         <Card className="max-w-2xl mx-auto mt-20 p-8">
           <h1 className="text-3xl font-bold mb-6 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             Welcome to your relational AI-therapist
