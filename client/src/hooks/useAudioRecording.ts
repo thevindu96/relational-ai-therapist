@@ -178,6 +178,7 @@ export function useAudioRecording({
       // Check permissions and get stream
       console.debug('[Audio Recording] Checking permissions');
       const stream = await checkPermissions();
+      console.debug('[Audio Recording] Permissions granted:', stream.active);
       
       // Initialize audio context
       const audioContext = initializeAudioContext(stream);
@@ -194,19 +195,25 @@ export function useAudioRecording({
       let recorder: MediaRecorder;
       try {
         recorder = new MediaRecorder(stream, {
-          mimeType: 'audio/webm;codecs=opus',
+          mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+            ? 'audio/webm;codecs=opus'
+            : 'audio/webm',
           audioBitsPerSecond: 128000
         });
+        console.debug('[Audio Recording] MediaRecorder created:', recorder.state);
       } catch (error) {
         console.error('[Audio Recording] Failed to initialize MediaRecorder:', error);
         throw new Error('Failed to initialize audio recorder. Please try a different browser.');
       }
       
       recorder.addEventListener('dataavailable', async (event) => {
-        console.debug('[Audio Recording] Data available:', event.data.size, 'bytes');
-        if (event.data.size > 0) {
+        console.debug('[Audio Recording] Data available event fired');
+        if (event.data && event.data.size > 0) {
+          console.debug('[Audio Recording] Processing chunk of size:', event.data.size);
           setAudioChunks((chunks) => [...chunks, event.data]);
           await processAudioChunk(event.data);
+        } else {
+          console.debug('[Audio Recording] Empty data chunk received');
         }
       });
 
@@ -217,12 +224,12 @@ export function useAudioRecording({
       });
 
       // Start recording with shorter intervals for more responsive transcription
-      console.debug('[Audio Recording] Starting MediaRecorder');
-      recorder.start(1500);
-      console.debug('[Audio Recording] MediaRecorder state:', recorder?.state);
-      
-      if (!recorder || recorder.state !== 'recording') {
-        throw new Error('Recorder failed to start');
+      if (!recorder || recorder.state === 'inactive') {
+        console.debug('[Audio Recording] Recorder inactive, attempting to start');
+        recorder.start(1500);
+        if (recorder.state !== 'recording') {
+          throw new Error('Failed to start recording');
+        }
       }
       
       setMediaRecorder(recorder);
