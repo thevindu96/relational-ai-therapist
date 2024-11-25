@@ -1,6 +1,5 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { analyzeTranscript, transcribeAudio } from "../lib/api";
-import { useToast } from "@/hooks/use-toast";
 
 interface UseAudioRecordingProps {
   onTranscript: (text: string, speaker: number) => void;
@@ -24,25 +23,18 @@ export function useAudioRecording({
         }
       });
       
-      const recorder = new MediaRecorder(stream);
-      const chunks: Blob[] = [];
-      
+      const recorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : 'audio/webm'
+      });
+
       recorder.ondataavailable = async (event) => {
         console.debug('[Audio Recording] Data available:', event.data.size, 'bytes');
         if (event.data.size > 0) {
-          chunks.push(event.data);
-        }
-      };
-
-      recorder.onstop = async () => {
-        console.debug('[Audio Recording] Recording stopped, processing data');
-        if (chunks.length > 0) {
-          const blob = new Blob(chunks, { type: 'audio/webm' });
-          console.debug('[Audio Recording] Created blob:', blob.size, 'bytes');
-          
           try {
-            const transcript = await transcribeAudio(blob);
-            console.debug('[Audio Recording] Received transcript:', transcript);
+            const transcript = await transcribeAudio(event.data);
+            console.debug('[Audio Recording] Live transcript:', transcript.text);
             
             if (transcript && transcript.text) {
               const speaker = determineSpeaker(transcript.text);
@@ -50,22 +42,18 @@ export function useAudioRecording({
               
               const analysis = await analyzeTranscript(transcript.text);
               onAnalysis(analysis);
-            } else {
-              throw new Error('No transcript received from server');
             }
           } catch (error) {
-            console.error('[Audio Recording] Transcription error:', error);
-            setError('Failed to transcribe audio. Please try again.');
+            console.error('[Audio Recording] Live transcription error:', error);
+            setError('Failed to transcribe audio chunk');
           }
         }
-        
-        // Cleanup
-        stream.getTracks().forEach(track => track.stop());
       };
 
       setMediaRecorder(recorder);
-      recorder.start();
-      console.debug('[Audio Recording] Started recording');
+      // Start recording with 3-second intervals for live transcription
+      recorder.start(3000);
+      console.debug('[Audio Recording] Started recording with live transcription');
       
     } catch (error) {
       console.error('[Audio Recording] Setup error:', error);
@@ -77,6 +65,9 @@ export function useAudioRecording({
     console.debug('[Audio Recording] Stopping recording');
     if (mediaRecorder?.state === 'recording') {
       mediaRecorder.stop();
+      // Cleanup
+      const tracks = mediaRecorder.stream.getTracks();
+      tracks.forEach(track => track.stop());
     }
   }, [mediaRecorder]);
 
