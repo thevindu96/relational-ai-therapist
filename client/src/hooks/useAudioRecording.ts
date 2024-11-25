@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { analyzeTranscript, transcribeAudio } from "../lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 interface UseAudioRecordingProps {
   onTranscript: (text: string, speaker: number) => void;
@@ -46,9 +47,44 @@ export function useAudioRecording({
   }, [mediaRecorder]);
 
   const checkPermissions = useCallback(async () => {
+    console.debug('[Audio Recording] Checking browser compatibility and permissions');
+    
     try {
+      // Check browser compatibility
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        throw new Error('Browser does not support audio recording');
+      }
+
+      // Check if permissions API is supported
+      if (!navigator?.permissions?.query) {
+        console.debug('[Audio Recording] Permissions API not supported, falling back to getUserMedia');
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        });
+        
+        if (!stream || !stream.active) {
+          throw new Error('Failed to initialize audio stream');
+        }
+        
+        return stream;
+      }
+
       // Check if permissions are already granted
       const permissionStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+      console.debug('[Audio Recording] Permission status:', permissionStatus.state);
+      
+      // Handle permission status changes
+      permissionStatus.addEventListener('change', () => {
+        console.debug('[Audio Recording] Permission status changed to:', permissionStatus.state);
+        if (permissionStatus.state === 'denied') {
+          cleanup();
+          setError('Microphone access was revoked. Please allow access in your browser settings.');
+        }
+      });
       
       if (permissionStatus.state === 'denied') {
         throw new Error('Microphone access is blocked. Please allow access in your browser settings.');
@@ -56,13 +92,19 @@ export function useAudioRecording({
 
       // Even if permission is granted or prompt, we still need to request the stream
       // as this also handles device selection and initialization
+      console.debug('[Audio Recording] Requesting audio stream with settings');
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true,
+          autoGainControl: true
         }
       });
+
+      console.debug('[Audio Recording] Stream active:', stream?.active);
+      if (!stream || !stream.active) {
+        throw new Error('Failed to initialize audio stream');
+      }
 
       streamRef.current = stream;
       return stream;
@@ -118,26 +160,50 @@ export function useAudioRecording({
     }
   };
 
+  const { toast } = useToast();
+
   const startRecording = useCallback(async () => {
+    console.debug('[Audio Recording] Attempting to start recording');
     try {
+      // Check if already recording
+      if (mediaRecorder?.state === 'recording') {
+        console.debug('[Audio Recording] Already recording, stopping current session');
+        cleanup();
+      }
+      
       // Clean up any existing recordings
       cleanup();
       setError(null);
 
       // Check permissions and get stream
+      console.debug('[Audio Recording] Checking permissions');
       const stream = await checkPermissions();
       
       // Initialize audio context
       const audioContext = initializeAudioContext(stream);
       const source = audioContext.createMediaStreamSource(stream);
 
+      console.debug('[Audio Recording] Initializing MediaRecorder');
+      
+      // Check for MediaRecorder support
+      if (!window.MediaRecorder) {
+        throw new Error('MediaRecorder is not supported in this browser');
+      }
+
       // Setup MediaRecorder with optimal settings
-      const recorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus',
-        audioBitsPerSecond: 128000
-      });
+      let recorder: MediaRecorder;
+      try {
+        recorder = new MediaRecorder(stream, {
+          mimeType: 'audio/webm;codecs=opus',
+          audioBitsPerSecond: 128000
+        });
+      } catch (error) {
+        console.error('[Audio Recording] Failed to initialize MediaRecorder:', error);
+        throw new Error('Failed to initialize audio recorder. Please try a different browser.');
+      }
       
       recorder.addEventListener('dataavailable', async (event) => {
+        console.debug('[Audio Recording] Data available:', event.data.size, 'bytes');
         if (event.data.size > 0) {
           setAudioChunks((chunks) => [...chunks, event.data]);
           await processAudioChunk(event.data);
@@ -151,12 +217,26 @@ export function useAudioRecording({
       });
 
       // Start recording with shorter intervals for more responsive transcription
+      console.debug('[Audio Recording] Starting MediaRecorder');
       recorder.start(1500);
+      console.debug('[Audio Recording] MediaRecorder state:', recorder?.state);
+      
+      if (!recorder || recorder.state !== 'recording') {
+        throw new Error('Recorder failed to start');
+      }
+      
       setMediaRecorder(recorder);
+      console.debug('[Audio Recording] Recording started successfully');
     } catch (error) {
       cleanup();
-      setError(error instanceof Error ? error.message : "Failed to start recording");
-      console.error("Error starting recording:", error);
+      const errorMessage = error instanceof Error ? error.message : "Failed to start recording";
+      console.error("[Audio Recording] Error starting recording:", error);
+      setError(errorMessage);
+      toast({
+        variant: "destructive",
+        title: "Recording Error",
+        description: errorMessage,
+      });
     }
   }, [cleanup, checkPermissions, initializeAudioContext]);
 
