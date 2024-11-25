@@ -12,6 +12,7 @@ export function useAudioRecording({
 }: UseAudioRecordingProps) {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [previousTranscription, setPreviousTranscription] = useState<string>('');
   const chunksRef = useRef<Blob[]>([]);
 
   const startRecording = useCallback(async () => {
@@ -61,15 +62,23 @@ export function useAudioRecording({
 
           try {
             const transcript = await transcribeAudio(audioBlob);
-            console.debug('[Audio Recording] Transcript:', transcript.text);
-
+            console.debug('[Audio Recording] Full transcript:', transcript.text);
+            
             if (transcript && transcript.text) {
-              const speaker = determineSpeaker(transcript.text);
-              onTranscript(transcript.text, speaker);
-
-              const analysis = await analyzeTranscript(transcript.text);
-              console.debug('[Audio Recording] Analysis received');
-              onAnalysis(analysis);
+              // Get only the new text by removing the previous transcription
+              const newText = transcript.text.replace(previousTranscription, '').trim();
+              
+              if (newText) {
+                console.debug('[Audio Recording] New text:', newText);
+                const speaker = determineSpeaker(newText);
+                onTranscript(newText, speaker);
+                
+                const analysis = await analyzeTranscript(newText);
+                console.debug('[Audio Recording] Analysis received for new text');
+                onAnalysis(analysis);
+                
+                setPreviousTranscription(transcript.text);
+              }
             }
           } catch (error) {
             console.error('[Audio Recording] Processing error:', error);
