@@ -150,88 +150,65 @@ export function useAudioRecording({
   const startRecording = useCallback(async () => {
     console.debug('[Audio Recording] Starting new recording session');
     try {
-      // Clean up any existing recordings
       cleanup();
       setError(null);
 
       const stream = await checkPermissions();
-      const chunks: Blob[] = [];
+      const audioChunks: Blob[] = [];
       
-      const recorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-          ? 'audio/webm;codecs=opus'
-          : 'audio/webm',
+      const recorder = new MediaRecorder(stream);
+      
+      recorder.addEventListener('dataavailable', (event) => {
+        console.debug('[Audio Recording] Data available:', event.data?.size);
+        if (event.data?.size > 0) {
+          audioChunks.push(event.data);
+        }
       });
 
-      // Create a promise that will resolve with the complete recording
-      const promise = new Promise<Blob>((resolve, reject) => {
-        recorder.ondataavailable = (e) => {
-          console.debug('[Audio Recording] Data chunk received:', e.data.size);
-          if (e.data.size > 0) {
-            chunks.push(e.data);
+      recorder.addEventListener('stop', async () => {
+        console.debug('[Audio Recording] Recording stopped, processing data');
+        try {
+          if (audioChunks.length > 0) {
+            const audioBlob = new Blob(audioChunks, { type: audioChunks[0].type });
+            const transcript = await transcribeAudio(audioBlob);
+            console.debug('[Audio Recording] Transcript:', transcript.text);
+            
+            const speaker = determineSpeaker(transcript.text);
+            onTranscript(transcript.text, speaker);
+            
+            const analysis = await analyzeTranscript(transcript.text);
+            onAnalysis(analysis);
+          } else {
+            console.error('[Audio Recording] No audio data collected');
+            throw new Error('No audio was recorded');
           }
-        };
-
-        recorder.onstop = () => {
-          console.debug('[Audio Recording] Recording stopped, combining chunks');
-          const completeBlob = new Blob(chunks, { type: chunks[0].type });
-          resolve(completeBlob);
-        };
-
-        recorder.onerror = (event) => {
-          console.error('[Audio Recording] Recording error:', event);
-          reject(new Error('Recording failed'));
-        };
+        } catch (error) {
+          console.error('[Audio Recording] Processing error:', error);
+          setError(error instanceof Error ? error.message : 'Failed to process recording');
+        }
       });
 
-      setRecordingPromise(promise);
-      recorder.start();
       setMediaRecorder(recorder);
+      recorder.start();
+      console.debug('[Audio Recording] Started recording');
 
     } catch (error) {
       console.error('[Audio Recording] Setup error:', error);
       setError(error instanceof Error ? error.message : 'Failed to start recording');
-      toast({
-        variant: "destructive",
-        title: "Recording Error",
-        description: error instanceof Error ? error.message : 'Failed to start recording',
-      });
     }
   }, [cleanup, checkPermissions]);
 
-  const stopRecording = useCallback(async () => {
+  const stopRecording = useCallback(() => {
     console.debug('[Audio Recording] Stopping recording');
     try {
       if (mediaRecorder?.state === 'recording') {
         mediaRecorder.stop();
-        
-        if (recordingPromise) {
-          const audioBlob = await recordingPromise;
-          console.debug('[Audio Recording] Processing complete audio:', audioBlob.size);
-          
-          const transcript = await transcribeAudio(audioBlob);
-          console.debug('[Audio Recording] Transcript received:', transcript.text);
-          
-          const speaker = determineSpeaker(transcript.text);
-          onTranscript(transcript.text, speaker);
-          
-          const analysis = await analyzeTranscript(transcript.text);
-          onAnalysis(analysis);
-        }
       }
     } catch (error) {
-      console.error('[Audio Recording] Processing error:', error);
-      setError(error instanceof Error ? error.message : 'Failed to process recording');
-      toast({
-        variant: "destructive",
-        title: "Processing Error",
-        description: error instanceof Error ? error.message : 'Failed to process recording',
-      });
-    } finally {
-      cleanup();
-      setRecordingPromise(null);
+      console.error('[Audio Recording] Stop error:', error);
+      setError(error instanceof Error ? error.message : 'Failed to stop recording');
     }
-  }, [mediaRecorder, recordingPromise, cleanup, onTranscript, onAnalysis]);
+  }, [mediaRecorder]);
 
   // Cleanup on unmount
   useEffect(() => {
