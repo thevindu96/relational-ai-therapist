@@ -23,17 +23,17 @@ export function useAudioRecording({
         }
       });
       
-      // Use webm with opus codec which is widely supported
       const recorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus'
+        mimeType: MediaRecorder.isTypeSupported('audio/wav') 
+          ? 'audio/wav' 
+          : 'audio/mp3'
       });
 
       recorder.addEventListener('dataavailable', async (event) => {
         if (event.data?.size > 0) {
           try {
-            // Create FormData with proper MIME type
             const formData = new FormData();
-            formData.append('audio', event.data, 'audio.webm');
+            formData.append('audio', event.data);
             
             const response = await fetch('/api/transcribe', {
               method: 'POST',
@@ -67,9 +67,8 @@ export function useAudioRecording({
       });
 
       setMediaRecorder(recorder);
-      // Start recording with shorter intervals (2 seconds)
-      recorder.start(2000);
-      console.debug('[Audio Recording] Started recording with live transcription');
+      recorder.start(1000); // Send chunks every second for more frequent updates
+      console.debug('[Audio Recording] Started recording');
       
     } catch (error) {
       console.error('[Audio Recording] Setup error:', error);
