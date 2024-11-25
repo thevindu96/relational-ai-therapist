@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { analyzeTranscript } from "../lib/api";
+import { analyzeTranscript, transcribeAudio } from "../lib/api";
 
 interface UseAudioRecordingProps {
   onTranscript: (text: string, speaker: number) => void;
@@ -24,49 +24,44 @@ export function useAudioRecording({
       });
       
       const recorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus' // Use webm format which is widely supported
+        mimeType: 'audio/webm',  // Simplified MIME type that's compatible with Whisper
+        audioBitsPerSecond: 128000
       });
 
-      recorder.addEventListener('dataavailable', async (event) => {
-        if (event.data?.size > 0) {
+      // Create audio chunks array outside the event handler
+      const chunks: Blob[] = [];
+
+      recorder.ondataavailable = async (event) => {
+        console.debug('[Audio Recording] Data chunk available:', event.data.size, 'bytes');
+        if (event.data.size > 0) {
+          chunks.push(event.data);
+          
+          // Create a new blob from all chunks so far
+          const audioBlob = new Blob(chunks, { type: 'audio/webm' });
+          console.debug('[Audio Recording] Processing combined audio:', audioBlob.size, 'bytes');
+          
           try {
-            const formData = new FormData();
-            formData.append('audio', event.data, 'audio.webm');
+            const transcript = await transcribeAudio(audioBlob);
+            console.debug('[Audio Recording] Transcript received:', transcript.text);
             
-            const response = await fetch('/api/transcribe', {
-              method: 'POST',
-              body: formData
-            });
-            
-            if (!response.ok) {
-              throw new Error(`Transcription failed: ${response.status}`);
-            }
-            
-            const data = await response.json();
-            console.debug('[Audio Recording] Transcription received:', data);
-            
-            if (data.text) {
-              const speaker = determineSpeaker(data.text);
-              onTranscript(data.text, speaker);
+            if (transcript && transcript.text) {
+              const speaker = determineSpeaker(transcript.text);
+              onTranscript(transcript.text, speaker);
               
-              const analysis = await analyzeTranscript(data.text);
+              const analysis = await analyzeTranscript(transcript.text);
               onAnalysis(analysis);
             }
           } catch (error) {
             console.error('[Audio Recording] Transcription error:', error);
-            setError('Failed to transcribe audio chunk');
+            setError('Failed to transcribe audio');
           }
         }
-      });
-
-      recorder.addEventListener('stop', () => {
-        console.debug('[Audio Recording] Recording stopped');
-        stream.getTracks().forEach(track => track.stop());
-      });
+      };
 
       setMediaRecorder(recorder);
-      recorder.start(2000); // Send chunks every 2 seconds for better processing
-      console.debug('[Audio Recording] Started recording');
+      // Start recording with 3-second intervals for live transcription
+      recorder.start(3000);
+      console.debug('[Audio Recording] Started recording with live transcription');
       
     } catch (error) {
       console.error('[Audio Recording] Setup error:', error);
@@ -76,13 +71,11 @@ export function useAudioRecording({
 
   const stopRecording = useCallback(() => {
     console.debug('[Audio Recording] Stopping recording');
-    try {
-      if (mediaRecorder?.state === 'recording') {
-        mediaRecorder.stop();
-      }
-    } catch (error) {
-      console.error('[Audio Recording] Stop error:', error);
-      setError('Failed to stop recording properly');
+    if (mediaRecorder?.state === 'recording') {
+      mediaRecorder.stop();
+      // Cleanup stream
+      const tracks = mediaRecorder.stream.getTracks();
+      tracks.forEach(track => track.stop());
     }
   }, [mediaRecorder]);
 
