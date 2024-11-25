@@ -31,6 +31,7 @@ export default function Home() {
   };
 
   const handleRecordingStateChange = (recording: boolean) => {
+    console.debug('[Recording] State changed:', recording);
     setIsRecording(recording);
   };
 
@@ -72,6 +73,7 @@ export default function Home() {
           <RecordButton
             isRecording={isRecording}
             onStop={handleStopRecording}
+            onRecordingStateChange={handleRecordingStateChange}
             onTranscript={(text, speaker) => {
               setConversation((prev) => [
                 ...prev,

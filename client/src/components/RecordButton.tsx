@@ -9,6 +9,7 @@ interface RecordButtonProps {
   onStop: () => void;
   onTranscript: (text: string, speaker: number) => void;
   onAnalysis: (analysis: { rating: "bad" | "medium" | "good"; feedback: string }) => void;
+  onRecordingStateChange: (recording: boolean) => void;
 }
 
 export default function RecordButton({
@@ -23,11 +24,16 @@ export default function RecordButton({
   });
 
   const handleStartRecording = async () => {
+    console.debug('[Recording] Starting recording');
     await startAudioRecording();
+    // Set recording state after successful start
+    onRecordingStateChange(true);
   };
 
   const handleStopRecording = () => {
+    console.debug('[Recording] Stopping recording');
     stopAudioRecording();
+    onRecordingStateChange(false);
     onStop();
   };
   const { toast } = useToast();
