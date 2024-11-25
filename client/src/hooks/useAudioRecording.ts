@@ -65,8 +65,8 @@ export function useAudioRecording({
             console.debug('[Audio Recording] Full transcript:', transcript.text);
             
             if (transcript && transcript.text) {
-              // Get only the new text by removing the previous transcription
-              const newText = transcript.text.replace(previousTranscription, '').trim();
+              // Extract only the new portion of text
+              const newText = transcript.text.slice(previousTranscription.length).trim();
               
               if (newText) {
                 console.debug('[Audio Recording] New text:', newText);
