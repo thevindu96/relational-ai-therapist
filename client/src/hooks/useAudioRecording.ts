@@ -24,24 +24,28 @@ export function useAudioRecording({
       });
       
       const recorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus', // Use a specific codec that's widely supported
+        mimeType: MediaRecorder.isTypeSupported('audio/wav') 
+          ? 'audio/wav'
+          : 'audio/webm'
       });
 
-      let chunks: Blob[] = [];
-      
       recorder.addEventListener('dataavailable', async (event) => {
-        console.debug('[Audio Recording] Data chunk available:', event.data?.size);
         if (event.data?.size > 0) {
-          chunks.push(event.data);
-          
           try {
-            // Create FormData with proper content type
+            // Create FormData with the correct MIME type
             const formData = new FormData();
-            const audioBlob = new Blob([event.data], { type: 'audio/webm;codecs=opus' });
-            formData.append('audio', audioBlob, 'recording.webm');
-            console.debug('[Audio Recording] Processing chunk:', audioBlob.size);
+            formData.append('audio', event.data);
             
-            const transcript = await transcribeAudio(audioBlob);
+            const response = await fetch('/api/transcribe', {
+              method: 'POST',
+              body: formData
+            });
+            
+            if (!response.ok) {
+              throw new Error('Transcription failed');
+            }
+            
+            const transcript = await response.json();
             console.debug('[Audio Recording] New transcript:', transcript);
             
             if (transcript && transcript.text) {
@@ -59,15 +63,14 @@ export function useAudioRecording({
       });
 
       recorder.addEventListener('stop', () => {
-        console.debug('[Audio Recording] Recording stopped, chunks:', chunks.length);
-        chunks = []; // Clear chunks on stop
+        console.debug('[Audio Recording] Recording stopped');
         stream.getTracks().forEach(track => track.stop());
       });
 
       setMediaRecorder(recorder);
-      // Start recording with 3-second intervals
-      recorder.start(3000);
-      console.debug('[Audio Recording] Started recording with live transcription');
+      // Start recording with 2-second intervals
+      recorder.start(2000);
+      console.debug('[Audio Recording] Started recording');
       
     } catch (error) {
       console.error('[Audio Recording] Setup error:', error);
