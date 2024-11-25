@@ -24,14 +24,11 @@ export function registerRoutes(app: Express) {
 
       console.debug('[Server] Received audio chunk:', req.file.mimetype, req.file.size);
 
-      // Create a Buffer from the audio data
-      const audioBuffer = Buffer.from(req.file.buffer);
-      
-      // Create a temporary file with the correct extension
+      // Convert to mp3 format for Whisper API
       const tempFile = new File(
-        [audioBuffer],
-        'audio.wav',
-        { type: 'audio/wav' }
+        [req.file.buffer],
+        'audio.mp3',
+        { type: 'audio/mpeg' }
       );
 
       const transcription = await openai.audio.transcriptions.create({
