@@ -24,15 +24,14 @@ export function registerRoutes(app: Express) {
 
       console.debug('[Server] Received audio chunk:', req.file.mimetype, req.file.size);
 
-      // Create a temporary file with the correct extension
       const tempFile = new File(
         [req.file.buffer],
-        'audio.wav',  // Change to WAV format
-        { type: 'audio/wav' }
+        'audio.webm',  // Use webm since that's what the browser is sending
+        { type: 'audio/webm' }
       );
 
       const transcription = await openai.audio.transcriptions.create({
-        file: audioFile,
+        file: tempFile,  // Use tempFile instead of audioFile
         model: "whisper-1",
         response_format: "json",
       });
