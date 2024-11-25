@@ -27,18 +27,15 @@ export function useAudioRecording({
         mimeType: 'audio/webm' // Always use webm format for consistency
       });
 
-      let chunks: Blob[] = [];
-      
       recorder.addEventListener('dataavailable', async (event) => {
         console.debug('[Audio Recording] Data chunk available:', event.data?.size);
         if (event.data?.size > 0) {
-          chunks.push(event.data);
-          // Create a blob from all chunks so far
-          const audioBlob = new Blob(chunks, { type: 'audio/webm' });
-          
           try {
+            // Process only the current chunk
+            const audioBlob = new Blob([event.data], { type: 'audio/webm' });
+            
             const transcript = await transcribeAudio(audioBlob);
-            console.debug('[Audio Recording] Transcript received:', transcript.text);
+            console.debug('[Audio Recording] New transcript:', transcript.text);
             
             if (transcript && transcript.text) {
               const speaker = determineSpeaker(transcript.text);
@@ -55,8 +52,7 @@ export function useAudioRecording({
       });
 
       recorder.addEventListener('stop', () => {
-        console.debug('[Audio Recording] Recording stopped, cleaning up');
-        chunks = [];
+        console.debug('[Audio Recording] Recording stopped');
         stream.getTracks().forEach(track => track.stop());
       });
 
