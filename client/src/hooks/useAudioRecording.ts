@@ -141,17 +141,17 @@ export function useAudioRecording({
     }
   }, []);
 
-  const processAudioChunk = async (chunk: Blob) => {
-    console.debug('[Audio Recording] Processing chunk:', chunk.size, 'bytes');
+  const processCompleteAudio = async (audioBlob: Blob) => {
+    console.debug('[Audio Recording] Processing complete audio:', audioBlob.size, 'bytes');
     if (isProcessing) {
-      console.debug('[Audio Recording] Already processing, skipping chunk');
+      console.debug('[Audio Recording] Already processing, skipping');
       return;
     }
     
     try {
       setIsProcessing(true);
-      console.debug('[Audio Recording] Sending chunk to transcribe API');
-      const transcript = await transcribeAudio(chunk);
+      console.debug('[Audio Recording] Sending audio to transcribe API');
+      const transcript = await transcribeAudio(audioBlob);
       console.debug('[Audio Recording] Received transcript:', transcript.text);
       
       const speaker = determineSpeaker(transcript.text);
@@ -218,12 +218,11 @@ export function useAudioRecording({
         console.debug('[Audio Recording] MediaRecorder started');
       });
 
-      recorder.addEventListener('dataavailable', async (event) => {
+      recorder.addEventListener('dataavailable', (event) => {
         console.debug('[Audio Recording] Data available event fired, data size:', event.data.size);
         if (event.data && event.data.size > 0) {
-          console.debug('[Audio Recording] Processing chunk');
-          setAudioChunks((chunks) => [...chunks, event.data]);
-          await processAudioChunk(event.data);
+          console.debug('[Audio Recording] Storing audio chunk');
+          setAudioChunks([event.data]);
         } else {
           console.debug('[Audio Recording] Empty data chunk received');
         }
@@ -242,7 +241,7 @@ export function useAudioRecording({
       // Start recording with shorter intervals for more responsive transcription
       if (!recorder || recorder.state === 'inactive') {
         console.debug('[Audio Recording] Recorder inactive, attempting to start');
-        recorder.start(1000); // Reduce interval to 1 second for more responsive transcription
+        recorder.start(); // Start recording without timeslice for complete audio
         if (recorder.state !== 'recording') {
           throw new Error('Failed to start recording');
         }
@@ -263,15 +262,26 @@ export function useAudioRecording({
     }
   }, [cleanup, checkPermissions, initializeAudioContext]);
 
-  const stopRecording = useCallback(() => {
+  const stopRecording = useCallback(async () => {
     try {
+      if (mediaRecorder?.state === 'recording') {
+        console.debug('[Audio Recording] Requesting final data and stopping');
+        mediaRecorder.requestData(); // Request final data
+        mediaRecorder.stop();
+        
+        // Process the complete audio
+        const audioBlob = audioChunks[0];
+        if (audioBlob) {
+          await processCompleteAudio(audioBlob);
+        }
+      }
       cleanup();
       setError(null);
     } catch (error) {
       console.error("Error stopping recording:", error);
       setError("Failed to stop recording properly");
     }
-  }, [cleanup]);
+  }, [cleanup, mediaRecorder, audioChunks]);
 
   // Cleanup on unmount
   useEffect(() => {
