@@ -24,17 +24,18 @@ export function useAudioRecording({
       });
       
       const recorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm',
-        audioBitsPerSecond: 128000
+        mimeType: MediaRecorder.isTypeSupported('audio/wav') 
+          ? 'audio/wav' 
+          : 'audio/webm'
       });
 
-      recorder.ondataavailable = async (event) => {
-        console.debug('[Audio Recording] Data chunk available:', event.data.size, 'bytes');
-        if (event.data.size > 0) {
+      // Set up event listeners before starting recording
+      recorder.addEventListener('dataavailable', async (event) => {
+        console.debug('[Audio Recording] Data available:', event.data?.size, 'bytes');
+        if (event.data?.size > 0) {
           try {
-            // Process only the current chunk instead of accumulated chunks
             const transcript = await transcribeAudio(event.data);
-            console.debug('[Audio Recording] Transcript received:', transcript.text);
+            console.debug('[Audio Recording] Live transcript:', transcript.text);
             
             if (transcript && transcript.text) {
               const speaker = determineSpeaker(transcript.text);
@@ -44,15 +45,25 @@ export function useAudioRecording({
               onAnalysis(analysis);
             }
           } catch (error) {
-            console.error('[Audio Recording] Transcription error:', error);
-            setError('Failed to transcribe audio');
+            console.error('[Audio Recording] Live transcription error:', error);
+            setError('Failed to transcribe audio chunk');
           }
         }
-      };
+      });
+
+      recorder.addEventListener('stop', () => {
+        console.debug('[Audio Recording] Recording stopped');
+        stream.getTracks().forEach(track => track.stop());
+      });
+
+      recorder.addEventListener('error', (error) => {
+        console.error('[Audio Recording] Recorder error:', error);
+        setError('Recording error occurred');
+      });
 
       setMediaRecorder(recorder);
-      // Send data every 3 seconds
-      recorder.start(3000);
+      // Start recording with 2-second intervals
+      recorder.start(2000);
       console.debug('[Audio Recording] Started recording with live transcription');
       
     } catch (error) {
@@ -63,11 +74,13 @@ export function useAudioRecording({
 
   const stopRecording = useCallback(() => {
     console.debug('[Audio Recording] Stopping recording');
-    if (mediaRecorder?.state === 'recording') {
-      mediaRecorder.stop();
-      // Cleanup stream
-      const tracks = mediaRecorder.stream.getTracks();
-      tracks.forEach(track => track.stop());
+    try {
+      if (mediaRecorder?.state === 'recording') {
+        mediaRecorder.stop();
+      }
+    } catch (error) {
+      console.error('[Audio Recording] Stop error:', error);
+      setError('Failed to stop recording properly');
     }
   }, [mediaRecorder]);
 
