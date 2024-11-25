@@ -24,10 +24,11 @@ export function registerRoutes(app: Express) {
 
       console.debug('[Server] Received audio chunk:', req.file.mimetype, req.file.size);
 
-      const audioFile = new File(
+      // Create a temporary file with the correct extension
+      const tempFile = new File(
         [req.file.buffer],
-        'audio.webm',
-        { type: 'audio/webm' }
+        'audio.wav',  // Change to WAV format
+        { type: 'audio/wav' }
       );
 
       const transcription = await openai.audio.transcriptions.create({

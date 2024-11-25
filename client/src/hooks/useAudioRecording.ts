@@ -24,7 +24,9 @@ export function useAudioRecording({
       });
       
       const recorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm' // Always use webm format for consistency
+        mimeType: MediaRecorder.isTypeSupported('audio/wav') 
+          ? 'audio/wav'
+          : 'audio/webm'
       });
 
       recorder.addEventListener('dataavailable', async (event) => {
@@ -32,7 +34,10 @@ export function useAudioRecording({
         if (event.data?.size > 0) {
           try {
             // Process only the current chunk
-            const audioBlob = new Blob([event.data], { type: 'audio/webm' });
+            // Convert audio to WAV format if needed
+            const audioBlob = new Blob([event.data], { 
+              type: MediaRecorder.isTypeSupported('audio/wav') ? 'audio/wav' : 'audio/webm'
+            });
             
             const transcript = await transcribeAudio(audioBlob);
             console.debug('[Audio Recording] New transcript:', transcript.text);
