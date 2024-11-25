@@ -12,7 +12,8 @@ export function useAudioRecording({
 }: UseAudioRecordingProps) {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [lastProcessedPosition, setLastProcessedPosition] = useState<number>(0);
+  const [processedTimestamps, setProcessedTimestamps] = useState<{start: number, end: number}[]>([]);
+  const recordingStartTime = useRef<number>(0);
   const chunksRef = useRef<Blob[]>([]);
 
   const startRecording = useCallback(async () => {
@@ -39,8 +40,10 @@ export function useAudioRecording({
       console.debug('[Audio Recording] Stream active:', stream.active);
       console.debug('[Audio Recording] Permissions granted:', stream.getAudioTracks()[0].enabled);
 
-      // Reset chunks array
+      // Reset chunks array and initialize recording time
       chunksRef.current = [];
+      recordingStartTime.current = Date.now();
+      setProcessedTimestamps([]);
 
       console.debug('[Audio Recording] Initializing MediaRecorder');
       const recorder = new MediaRecorder(stream, {
@@ -53,32 +56,39 @@ export function useAudioRecording({
       recorder.ondataavailable = async (event) => {
         console.debug('[Audio Recording] Data chunk received:', event.data.size);
         if (event.data.size > 0) {
-          chunksRef.current.push(event.data);
+          const currentTime = Date.now() - recordingStartTime.current;
+          const chunk = {
+            blob: event.data,
+            timestamp: currentTime
+          };
           
-          try {
-            const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
-            const transcript = await transcribeAudio(audioBlob);
-            
-            if (transcript && transcript.text) {
-              // Only get the new portion of text after our last processed position
-              const fullText = transcript.text;
-              const newText = fullText.slice(lastProcessedPosition).trim();
+          // Check if this time segment was already processed
+          const isProcessed = processedTimestamps.some(ts => 
+            currentTime >= ts.start && currentTime <= ts.end
+          );
+          
+          if (!isProcessed) {
+            try {
+              const transcript = await transcribeAudio(chunk.blob);
               
-              if (newText) {
-                console.debug('[Audio Recording] New text portion:', newText);
-                const speaker = determineSpeaker(newText);
-                onTranscript(newText, speaker);
+              if (transcript && transcript.text) {
+                console.debug('[Audio Recording] New chunk transcript:', transcript.text);
+                const speaker = determineSpeaker(transcript.text);
+                onTranscript(transcript.text, speaker);
                 
-                const analysis = await analyzeTranscript(newText);
+                const analysis = await analyzeTranscript(transcript.text);
                 onAnalysis(analysis);
                 
-                // Update our position to the end of the full text
-                setLastProcessedPosition(fullText.length);
+                // Mark this time segment as processed
+                setProcessedTimestamps(prev => [...prev, {
+                  start: currentTime,
+                  end: currentTime + 3000 // 3 second chunks
+                }]);
               }
+            } catch (error) {
+              console.error('[Audio Recording] Processing error:', error);
+              setError('Failed to process audio chunk');
             }
-          } catch (error) {
-            console.error('[Audio Recording] Processing error:', error);
-            setError('Failed to process audio chunk');
           }
         }
       };
@@ -116,8 +126,9 @@ export function useAudioRecording({
           track.stop();
           console.debug('[Audio Recording] Track stopped:', track.kind);
         });
-        // Reset position when stopping
-        setLastProcessedPosition(0);
+        // Reset timestamps when stopping
+        setProcessedTimestamps([]);
+        recordingStartTime.current = 0;
         chunksRef.current = [];
       } catch (error) {
         console.error('[Audio Recording] Stop error:', error);
