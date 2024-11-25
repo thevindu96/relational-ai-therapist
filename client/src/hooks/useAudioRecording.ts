@@ -12,7 +12,7 @@ export function useAudioRecording({
 }: UseAudioRecordingProps) {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [previousTranscription, setPreviousTranscription] = useState<string>('');
+  const [lastProcessedText, setLastProcessedText] = useState<string>('');
   const chunksRef = useRef<Blob[]>([]);
 
   const startRecording = useCallback(async () => {
@@ -62,22 +62,22 @@ export function useAudioRecording({
 
           try {
             const transcript = await transcribeAudio(audioBlob);
-            console.debug('[Audio Recording] Full transcript:', transcript.text);
             
             if (transcript && transcript.text) {
-              // Extract only the new portion of text
-              const newText = transcript.text.slice(previousTranscription.length).trim();
+              const fullText = transcript.text;
+              // Get only the truly new content by comparing with last processed text
+              const newContent = fullText.replace(lastProcessedText, '').trim();
               
-              if (newText) {
-                console.debug('[Audio Recording] New text:', newText);
-                const speaker = determineSpeaker(newText);
-                onTranscript(newText, speaker);
+              if (newContent) {
+                console.debug('[Audio Recording] New content:', newContent);
+                const speaker = determineSpeaker(newContent);
+                onTranscript(newContent, speaker);
                 
-                const analysis = await analyzeTranscript(newText);
-                console.debug('[Audio Recording] Analysis received for new text');
+                const analysis = await analyzeTranscript(newContent);
+                console.debug('[Audio Recording] Analysis received');
                 onAnalysis(analysis);
                 
-                setPreviousTranscription(transcript.text);
+                setLastProcessedText(fullText);
               }
             }
           } catch (error) {

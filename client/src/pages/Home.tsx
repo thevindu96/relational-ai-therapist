@@ -13,7 +13,6 @@ import {
 export default function Home() {
   const [isRecording, setIsRecording] = useState(false);
   const [hasStartedSession, setHasStartedSession] = useState(false);
-  const [lastTranscriptText, setLastTranscriptText] = useState('');
   const [conversation, setConversation] = useState<Array<{
     text: string;
     speaker: number;
@@ -76,14 +75,10 @@ export default function Home() {
             onStop={handleStopRecording}
             onRecordingStateChange={handleRecordingStateChange}
             onTranscript={(text, speaker) => {
-              // Only add new text that hasn't been shown before
-              if (!lastTranscriptText || !text.includes(lastTranscriptText)) {
-                setConversation((prev) => [
-                  ...prev,
-                  { text, speaker, timestamp: Date.now() },
-                ]);
-                setLastTranscriptText(text);
-              }
+              setConversation((prev) => [
+                ...prev,
+                { text, speaker, timestamp: Date.now() },
+              ]);
             }}
             onAnalysis={(feedback) => {
               setAnalysis((prev) => [
