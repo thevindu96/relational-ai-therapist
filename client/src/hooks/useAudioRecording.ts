@@ -25,29 +25,35 @@ export function useAudioRecording({
       
       const recorder = new MediaRecorder(stream, {
         mimeType: MediaRecorder.isTypeSupported('audio/wav') 
-          ? 'audio/wav'
+          ? 'audio/wav' 
           : 'audio/webm'
       });
 
+      let lastTranscript = '';
+      
       recorder.addEventListener('dataavailable', async (event) => {
         console.debug('[Audio Recording] Data chunk available:', event.data?.size);
         if (event.data?.size > 0) {
           try {
-            // Process only the current chunk
-            // Convert audio to WAV format if needed
             const audioBlob = new Blob([event.data], { 
-              type: MediaRecorder.isTypeSupported('audio/wav') ? 'audio/wav' : 'audio/webm'
+              type: 'audio/wav'
             });
             
             const transcript = await transcribeAudio(audioBlob);
             console.debug('[Audio Recording] New transcript:', transcript.text);
             
-            if (transcript && transcript.text) {
-              const speaker = determineSpeaker(transcript.text);
-              onTranscript(transcript.text, speaker);
-              
-              const analysis = await analyzeTranscript(transcript.text);
-              onAnalysis(analysis);
+            // Only process if we have new text
+            if (transcript && transcript.text && transcript.text !== lastTranscript) {
+              const newText = transcript.text.replace(lastTranscript, '').trim();
+              if (newText) {
+                const speaker = determineSpeaker(newText);
+                onTranscript(newText, speaker);
+                
+                const analysis = await analyzeTranscript(newText);
+                onAnalysis(analysis);
+                
+                lastTranscript = transcript.text;
+              }
             }
           } catch (error) {
             console.error('[Audio Recording] Transcription error:', error);
@@ -59,11 +65,12 @@ export function useAudioRecording({
       recorder.addEventListener('stop', () => {
         console.debug('[Audio Recording] Recording stopped');
         stream.getTracks().forEach(track => track.stop());
+        lastTranscript = '';
       });
 
       setMediaRecorder(recorder);
-      // Request data every 3 seconds
-      recorder.start(3000);
+      // Request data every 2 seconds for more frequent updates
+      recorder.start(2000);
       console.debug('[Audio Recording] Started recording with live transcription');
       
     } catch (error) {
