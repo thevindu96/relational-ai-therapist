@@ -192,23 +192,10 @@ export function useAudioRecording({
         console.debug('[Audio Recording] MediaRecorder started');
       });
 
-      recorder.addEventListener('dataavailable', async (event) => {
+      recorder.addEventListener('dataavailable', (event) => {
         console.debug('[Audio Recording] Data available event fired, size:', event.data.size);
         if (event.data && event.data.size > 0) {
-          try {
-            console.debug('[Audio Recording] Processing audio data');
-            const transcript = await transcribeAudio(event.data);
-            console.debug('[Audio Recording] Transcript received:', transcript.text);
-            
-            const speaker = determineSpeaker(transcript.text);
-            onTranscript(transcript.text, speaker);
-            
-            const analysis = await analyzeTranscript(transcript.text);
-            onAnalysis(analysis);
-          } catch (error) {
-            console.error('[Audio Recording] Processing error:', error);
-            setError(error instanceof Error ? error.message : 'Error processing audio');
-          }
+          setAudioChunks([event.data]);
         }
       });
 
@@ -251,8 +238,30 @@ export function useAudioRecording({
     try {
       if (mediaRecorder?.state === 'recording') {
         mediaRecorder.stop();
-        // Request any remaining data
-        mediaRecorder.requestData();
+        
+        // Wait for the final chunk of audio
+        const finalChunk = await new Promise<Blob>((resolve) => {
+          mediaRecorder.addEventListener('dataavailable', (event) => {
+            if (event.data.size > 0) {
+              resolve(event.data);
+            }
+          });
+        });
+
+        console.debug('[Audio Recording] Processing complete recording');
+        try {
+          const transcript = await transcribeAudio(finalChunk);
+          console.debug('[Audio Recording] Transcript received:', transcript.text);
+          
+          const speaker = determineSpeaker(transcript.text);
+          onTranscript(transcript.text, speaker);
+          
+          const analysis = await analyzeTranscript(transcript.text);
+          onAnalysis(analysis);
+        } catch (error) {
+          console.error('[Audio Recording] Processing error:', error);
+          setError(error instanceof Error ? error.message : 'Error processing audio');
+        }
       }
     } catch (error) {
       console.error('[Audio Recording] Stop error:', error);
@@ -260,7 +269,7 @@ export function useAudioRecording({
     } finally {
       cleanup();
     }
-  }, [cleanup, mediaRecorder]);
+  }, [cleanup, mediaRecorder, onTranscript, onAnalysis]);
 
   // Cleanup on unmount
   useEffect(() => {
