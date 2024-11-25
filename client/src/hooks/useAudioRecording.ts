@@ -180,8 +180,7 @@ export function useAudioRecording({
         recorder = new MediaRecorder(stream, {
           mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
             ? 'audio/webm;codecs=opus'
-            : 'audio/webm',
-          audioBitsPerSecond: 128000
+            : 'audio/webm'
         });
         console.debug('[Audio Recording] MediaRecorder created:', recorder.state);
       } catch (error) {
@@ -194,21 +193,20 @@ export function useAudioRecording({
       });
 
       recorder.addEventListener('dataavailable', async (event) => {
-        console.debug('[Audio Recording] Data available event fired, data size:', event.data.size);
+        console.debug('[Audio Recording] Data available event fired, size:', event.data.size);
         if (event.data && event.data.size > 0) {
-          console.debug('[Audio Recording] Processing audio chunk');
           try {
+            console.debug('[Audio Recording] Processing audio data');
             const transcript = await transcribeAudio(event.data);
-            console.debug('[Audio Recording] Received transcript:', transcript.text);
+            console.debug('[Audio Recording] Transcript received:', transcript.text);
             
             const speaker = determineSpeaker(transcript.text);
             onTranscript(transcript.text, speaker);
             
-            console.debug('[Audio Recording] Analyzing transcript');
             const analysis = await analyzeTranscript(transcript.text);
             onAnalysis(analysis);
           } catch (error) {
-            console.error('[Audio Recording] Error processing audio:', error);
+            console.error('[Audio Recording] Processing error:', error);
             setError(error instanceof Error ? error.message : 'Error processing audio');
           }
         }
@@ -224,10 +222,10 @@ export function useAudioRecording({
         cleanup();
       });
 
-      // Start recording with shorter intervals for more responsive transcription
+      // Start recording with 5-second intervals
       if (!recorder || recorder.state === 'inactive') {
         console.debug('[Audio Recording] Recorder inactive, attempting to start');
-        recorder.start(); // Start recording without timeslice for complete audio
+        recorder.start(5000); // Start recording with 5-second chunks
         if (recorder.state !== 'recording') {
           throw new Error('Failed to start recording');
         }
@@ -249,17 +247,18 @@ export function useAudioRecording({
   }, [cleanup, checkPermissions, initializeAudioContext]);
 
   const stopRecording = useCallback(async () => {
+    console.debug('[Audio Recording] Stopping recording');
     try {
       if (mediaRecorder?.state === 'recording') {
-        console.debug('[Audio Recording] Stopping recording');
-        mediaRecorder.requestData(); // Request final chunk
         mediaRecorder.stop();
+        // Request any remaining data
+        mediaRecorder.requestData();
       }
-      cleanup();
-      setError(null);
     } catch (error) {
-      console.error("Error stopping recording:", error);
-      setError("Failed to stop recording properly");
+      console.error('[Audio Recording] Stop error:', error);
+      setError('Failed to stop recording properly');
+    } finally {
+      cleanup();
     }
   }, [cleanup, mediaRecorder]);
 
