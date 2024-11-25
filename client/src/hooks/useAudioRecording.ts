@@ -13,6 +13,7 @@ export function useAudioRecording({
 }: UseAudioRecordingProps) {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [recordingPromise, setRecordingPromise] = useState<Promise<Blob> | null>(null);
+  const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -43,6 +44,7 @@ export function useAudioRecording({
       setMediaRecorder(null);
     }
 
+    // Clear audio chunks
     setAudioChunks([]);
   }, [mediaRecorder]);
 
