@@ -12,7 +12,7 @@ export function useAudioRecording({
 }: UseAudioRecordingProps) {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [processedTranscripts, setProcessedTranscripts] = useState<Set<string>>(new Set());
+  const [lastProcessedPosition, setLastProcessedPosition] = useState<number>(0);
   const chunksRef = useRef<Blob[]>([]);
 
   const startRecording = useCallback(async () => {
@@ -60,30 +60,20 @@ export function useAudioRecording({
             const transcript = await transcribeAudio(audioBlob);
             
             if (transcript && transcript.text) {
-              // Split into sentences for more granular control
-              const sentences = transcript.text.split(/[.!?]+/).filter(s => s.trim());
+              // Only get the new portion of text after our last processed position
+              const fullText = transcript.text;
+              const newText = fullText.slice(lastProcessedPosition).trim();
               
-              // Find new sentences that haven't been processed
-              const newSentences = sentences.filter(sentence => {
-                const trimmed = sentence.trim();
-                return trimmed && !processedTranscripts.has(trimmed);
-              });
-              
-              if (newSentences.length > 0) {
-                // Join new sentences and process them
-                const newText = newSentences.join('. ').trim() + '.';
-                console.debug('[Audio Recording] New text segment:', newText);
-                
+              if (newText) {
+                console.debug('[Audio Recording] New text portion:', newText);
                 const speaker = determineSpeaker(newText);
                 onTranscript(newText, speaker);
                 
                 const analysis = await analyzeTranscript(newText);
                 onAnalysis(analysis);
                 
-                // Mark these sentences as processed
-                newSentences.forEach(sentence => {
-                  setProcessedTranscripts(prev => new Set([...prev, sentence.trim()]));
-                });
+                // Update our position to the end of the full text
+                setLastProcessedPosition(fullText.length);
               }
             }
           } catch (error) {
@@ -126,8 +116,8 @@ export function useAudioRecording({
           track.stop();
           console.debug('[Audio Recording] Track stopped:', track.kind);
         });
-        // Clear processed transcripts and chunks when stopping
-        setProcessedTranscripts(new Set());
+        // Reset position when stopping
+        setLastProcessedPosition(0);
         chunksRef.current = [];
       } catch (error) {
         console.error('[Audio Recording] Stop error:', error);
