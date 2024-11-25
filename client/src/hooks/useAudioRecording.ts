@@ -12,7 +12,7 @@ export function useAudioRecording({
 }: UseAudioRecordingProps) {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [allProcessedText, setAllProcessedText] = useState<string>('');
+  const [processedTranscripts, setProcessedTranscripts] = useState<Set<string>>(new Set());
   const chunksRef = useRef<Blob[]>([]);
 
   const startRecording = useCallback(async () => {
@@ -54,31 +54,36 @@ export function useAudioRecording({
         console.debug('[Audio Recording] Data chunk received:', event.data.size);
         if (event.data.size > 0) {
           chunksRef.current.push(event.data);
-          console.debug('[Audio Recording] Total chunks:', chunksRef.current.length);
-
-          // Process all accumulated chunks
-          const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
-          console.debug('[Audio Recording] Processing audio size:', audioBlob.size);
-
+          
           try {
+            const audioBlob = new Blob(chunksRef.current, { type: 'audio/webm' });
             const transcript = await transcribeAudio(audioBlob);
             
             if (transcript && transcript.text) {
-              // Remove all previously processed text to get only new content
-              const newText = transcript.text
-                .substring(allProcessedText.length)
-                .trim();
+              // Split into sentences for more granular control
+              const sentences = transcript.text.split(/[.!?]+/).filter(s => s.trim());
               
-              if (newText) {
+              // Find new sentences that haven't been processed
+              const newSentences = sentences.filter(sentence => {
+                const trimmed = sentence.trim();
+                return trimmed && !processedTranscripts.has(trimmed);
+              });
+              
+              if (newSentences.length > 0) {
+                // Join new sentences and process them
+                const newText = newSentences.join('. ').trim() + '.';
                 console.debug('[Audio Recording] New text segment:', newText);
+                
                 const speaker = determineSpeaker(newText);
                 onTranscript(newText, speaker);
                 
                 const analysis = await analyzeTranscript(newText);
                 onAnalysis(analysis);
                 
-                // Update all processed text
-                setAllProcessedText(transcript.text);
+                // Mark these sentences as processed
+                newSentences.forEach(sentence => {
+                  setProcessedTranscripts(prev => new Set([...prev, sentence.trim()]));
+                });
               }
             }
           } catch (error) {
@@ -113,7 +118,7 @@ export function useAudioRecording({
 
   const stopRecording = useCallback(() => {
     console.debug('[Audio Recording] Stopping recording');
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
+    if (mediaRecorder?.state === 'recording') {
       try {
         mediaRecorder.stop();
         const tracks = mediaRecorder.stream.getTracks();
@@ -121,7 +126,8 @@ export function useAudioRecording({
           track.stop();
           console.debug('[Audio Recording] Track stopped:', track.kind);
         });
-        // Clear chunks after stopping
+        // Clear processed transcripts and chunks when stopping
+        setProcessedTranscripts(new Set());
         chunksRef.current = [];
       } catch (error) {
         console.error('[Audio Recording] Stop error:', error);
