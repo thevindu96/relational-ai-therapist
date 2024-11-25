@@ -34,7 +34,13 @@ export default function RecordButton({
   }, [error]);
 
   return (
-    <div className="fixed bottom-8 left-1/2 -translate-x-1/2">
+    <div className="fixed bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2">
+      {isRecording && (
+        <div className="flex items-center gap-2 bg-red-100 px-4 py-2 rounded-full">
+          <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+          <span className="text-red-600 font-medium">Recording...</span>
+        </div>
+      )}
       <Button
         size="lg"
         variant={isRecording ? "destructive" : "default"}
@@ -42,14 +48,25 @@ export default function RecordButton({
           stopRecording();
           onStop();
         } : startRecording}
-        className="h-16 w-16 rounded-full"
+        className="h-16 px-8 rounded-full flex items-center gap-2"
       >
         {isRecording ? (
-          <Square className="h-6 w-6" />
+          <>
+            <Square className="h-6 w-6" />
+            <span>Stop Recording</span>
+          </>
         ) : (
-          <Mic className="h-6 w-6" />
+          <>
+            <Mic className="h-6 w-6" />
+            <span>Start Recording</span>
+          </>
         )}
       </Button>
+      {!isRecording && (
+        <p className="text-sm text-gray-500 text-center mt-2">
+          Click to start recording your conversation
+        </p>
+      )}
     </div>
   );
 }
