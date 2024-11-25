@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { analyzeTranscript, transcribeAudio } from "../lib/api";
+import { analyzeTranscript } from "../lib/api";
 
 interface UseAudioRecordingProps {
   onTranscript: (text: string, speaker: number) => void;
@@ -23,18 +23,17 @@ export function useAudioRecording({
         }
       });
       
+      // Use webm with opus codec which is widely supported
       const recorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/wav') 
-          ? 'audio/wav'
-          : 'audio/webm'
+        mimeType: 'audio/webm;codecs=opus'
       });
 
       recorder.addEventListener('dataavailable', async (event) => {
         if (event.data?.size > 0) {
           try {
-            // Create FormData with the correct MIME type
+            // Create FormData with proper MIME type
             const formData = new FormData();
-            formData.append('audio', event.data);
+            formData.append('audio', event.data, 'audio.webm');
             
             const response = await fetch('/api/transcribe', {
               method: 'POST',
@@ -42,17 +41,17 @@ export function useAudioRecording({
             });
             
             if (!response.ok) {
-              throw new Error('Transcription failed');
+              throw new Error(`Transcription failed: ${response.status}`);
             }
             
-            const transcript = await response.json();
-            console.debug('[Audio Recording] New transcript:', transcript);
+            const data = await response.json();
+            console.debug('[Audio Recording] Transcription received:', data);
             
-            if (transcript && transcript.text) {
-              const speaker = determineSpeaker(transcript.text);
-              onTranscript(transcript.text, speaker);
+            if (data.text) {
+              const speaker = determineSpeaker(data.text);
+              onTranscript(data.text, speaker);
               
-              const analysis = await analyzeTranscript(transcript.text);
+              const analysis = await analyzeTranscript(data.text);
               onAnalysis(analysis);
             }
           } catch (error) {
@@ -68,9 +67,9 @@ export function useAudioRecording({
       });
 
       setMediaRecorder(recorder);
-      // Start recording with 2-second intervals
+      // Start recording with shorter intervals (2 seconds)
       recorder.start(2000);
-      console.debug('[Audio Recording] Started recording');
+      console.debug('[Audio Recording] Started recording with live transcription');
       
     } catch (error) {
       console.error('[Audio Recording] Setup error:', error);

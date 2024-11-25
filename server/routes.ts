@@ -24,16 +24,15 @@ export function registerRoutes(app: Express) {
 
       console.debug('[Server] Received audio chunk:', req.file.mimetype, req.file.size);
 
-      // Convert to WAV format for Whisper API
-      const audioBuffer = Buffer.from(req.file.buffer);
-      const tempFile = new File(
-        [audioBuffer],
-        'audio.wav',
-        { type: 'audio/wav' }
+      // Create a File object with the correct MIME type
+      const audioFile = new File(
+        [req.file.buffer],
+        'audio.webm',
+        { type: 'audio/webm' }
       );
 
       const transcription = await openai.audio.transcriptions.create({
-        file: tempFile,
+        file: audioFile,
         model: "whisper-1",
         response_format: "json",
       });
