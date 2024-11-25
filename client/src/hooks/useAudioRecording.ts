@@ -24,53 +24,48 @@ export function useAudioRecording({
       });
       
       const recorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/wav') 
-          ? 'audio/wav' 
-          : 'audio/webm'
+        mimeType: 'audio/webm',  // Always use webm as it's widely supported
+        bitsPerSecond: 128000
       });
 
-      let lastTranscript = '';
+      let chunks: Blob[] = [];
       
       recorder.addEventListener('dataavailable', async (event) => {
         console.debug('[Audio Recording] Data chunk available:', event.data?.size);
         if (event.data?.size > 0) {
+          chunks.push(event.data);
+          
           try {
-            const audioBlob = new Blob([event.data], { 
-              type: 'audio/wav'
-            });
+            // Create a blob from just the current chunk
+            const audioBlob = new Blob([event.data], { type: 'audio/webm' });
+            console.debug('[Audio Recording] Processing chunk:', audioBlob.size);
             
             const transcript = await transcribeAudio(audioBlob);
-            console.debug('[Audio Recording] New transcript:', transcript.text);
+            console.debug('[Audio Recording] New transcript:', transcript);
             
-            // Only process if we have new text
-            if (transcript && transcript.text && transcript.text !== lastTranscript) {
-              const newText = transcript.text.replace(lastTranscript, '').trim();
-              if (newText) {
-                const speaker = determineSpeaker(newText);
-                onTranscript(newText, speaker);
-                
-                const analysis = await analyzeTranscript(newText);
-                onAnalysis(analysis);
-                
-                lastTranscript = transcript.text;
-              }
+            if (transcript && transcript.text) {
+              const speaker = determineSpeaker(transcript.text);
+              onTranscript(transcript.text, speaker);
+              
+              const analysis = await analyzeTranscript(transcript.text);
+              onAnalysis(analysis);
             }
           } catch (error) {
             console.error('[Audio Recording] Transcription error:', error);
-            setError('Failed to transcribe audio');
+            setError('Failed to transcribe audio chunk');
           }
         }
       });
 
       recorder.addEventListener('stop', () => {
-        console.debug('[Audio Recording] Recording stopped');
+        console.debug('[Audio Recording] Recording stopped, chunks:', chunks.length);
+        chunks = []; // Clear chunks on stop
         stream.getTracks().forEach(track => track.stop());
-        lastTranscript = '';
       });
 
       setMediaRecorder(recorder);
-      // Request data every 2 seconds for more frequent updates
-      recorder.start(2000);
+      // Start recording with 3-second intervals
+      recorder.start(3000);
       console.debug('[Audio Recording] Started recording with live transcription');
       
     } catch (error) {
