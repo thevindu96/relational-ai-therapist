@@ -141,32 +141,7 @@ export function useAudioRecording({
     }
   }, []);
 
-  const processCompleteAudio = async (audioBlob: Blob) => {
-    console.debug('[Audio Recording] Processing complete audio:', audioBlob.size, 'bytes');
-    if (isProcessing) {
-      console.debug('[Audio Recording] Already processing, skipping');
-      return;
-    }
-    
-    try {
-      setIsProcessing(true);
-      console.debug('[Audio Recording] Sending audio to transcribe API');
-      const transcript = await transcribeAudio(audioBlob);
-      console.debug('[Audio Recording] Received transcript:', transcript.text);
-      
-      const speaker = determineSpeaker(transcript.text);
-      onTranscript(transcript.text, speaker);
-      
-      console.debug('[Audio Recording] Analyzing transcript');
-      const analysis = await analyzeTranscript(transcript.text);
-      onAnalysis(analysis);
-    } catch (error) {
-      console.error("[Audio Recording] Error processing audio:", error);
-      setError(error instanceof Error ? error.message : "Error processing audio");
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+  
 
   const { toast } = useToast();
 
@@ -218,13 +193,24 @@ export function useAudioRecording({
         console.debug('[Audio Recording] MediaRecorder started');
       });
 
-      recorder.addEventListener('dataavailable', (event) => {
+      recorder.addEventListener('dataavailable', async (event) => {
         console.debug('[Audio Recording] Data available event fired, data size:', event.data.size);
         if (event.data && event.data.size > 0) {
-          console.debug('[Audio Recording] Storing audio chunk');
-          setAudioChunks([event.data]);
-        } else {
-          console.debug('[Audio Recording] Empty data chunk received');
+          console.debug('[Audio Recording] Processing audio chunk');
+          try {
+            const transcript = await transcribeAudio(event.data);
+            console.debug('[Audio Recording] Received transcript:', transcript.text);
+            
+            const speaker = determineSpeaker(transcript.text);
+            onTranscript(transcript.text, speaker);
+            
+            console.debug('[Audio Recording] Analyzing transcript');
+            const analysis = await analyzeTranscript(transcript.text);
+            onAnalysis(analysis);
+          } catch (error) {
+            console.error('[Audio Recording] Error processing audio:', error);
+            setError(error instanceof Error ? error.message : 'Error processing audio');
+          }
         }
       });
 
@@ -265,15 +251,9 @@ export function useAudioRecording({
   const stopRecording = useCallback(async () => {
     try {
       if (mediaRecorder?.state === 'recording') {
-        console.debug('[Audio Recording] Requesting final data and stopping');
-        mediaRecorder.requestData(); // Request final data
+        console.debug('[Audio Recording] Stopping recording');
+        mediaRecorder.requestData(); // Request final chunk
         mediaRecorder.stop();
-        
-        // Process the complete audio
-        const audioBlob = audioChunks[0];
-        if (audioBlob) {
-          await processCompleteAudio(audioBlob);
-        }
       }
       cleanup();
       setError(null);
@@ -281,7 +261,7 @@ export function useAudioRecording({
       console.error("Error stopping recording:", error);
       setError("Failed to stop recording properly");
     }
-  }, [cleanup, mediaRecorder, audioChunks]);
+  }, [cleanup, mediaRecorder]);
 
   // Cleanup on unmount
   useEffect(() => {
