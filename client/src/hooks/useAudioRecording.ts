@@ -142,18 +142,26 @@ export function useAudioRecording({
   }, []);
 
   const processAudioChunk = async (chunk: Blob) => {
-    if (isProcessing) return;
+    console.debug('[Audio Recording] Processing chunk:', chunk.size, 'bytes');
+    if (isProcessing) {
+      console.debug('[Audio Recording] Already processing, skipping chunk');
+      return;
+    }
     
     try {
       setIsProcessing(true);
+      console.debug('[Audio Recording] Sending chunk to transcribe API');
       const transcript = await transcribeAudio(chunk);
+      console.debug('[Audio Recording] Received transcript:', transcript.text);
+      
       const speaker = determineSpeaker(transcript.text);
       onTranscript(transcript.text, speaker);
       
+      console.debug('[Audio Recording] Analyzing transcript');
       const analysis = await analyzeTranscript(transcript.text);
       onAnalysis(analysis);
     } catch (error) {
-      console.error("Error processing audio:", error);
+      console.error("[Audio Recording] Error processing audio:", error);
       setError(error instanceof Error ? error.message : "Error processing audio");
     } finally {
       setIsProcessing(false);
@@ -205,16 +213,24 @@ export function useAudioRecording({
         console.error('[Audio Recording] Failed to initialize MediaRecorder:', error);
         throw new Error('Failed to initialize audio recorder. Please try a different browser.');
       }
-      
+
+      recorder.addEventListener('start', () => {
+        console.debug('[Audio Recording] MediaRecorder started');
+      });
+
       recorder.addEventListener('dataavailable', async (event) => {
-        console.debug('[Audio Recording] Data available event fired');
+        console.debug('[Audio Recording] Data available event fired, data size:', event.data.size);
         if (event.data && event.data.size > 0) {
-          console.debug('[Audio Recording] Processing chunk of size:', event.data.size);
+          console.debug('[Audio Recording] Processing chunk');
           setAudioChunks((chunks) => [...chunks, event.data]);
           await processAudioChunk(event.data);
         } else {
           console.debug('[Audio Recording] Empty data chunk received');
         }
+      });
+
+      recorder.addEventListener('stop', () => {
+        console.debug('[Audio Recording] MediaRecorder stopped');
       });
 
       recorder.addEventListener('error', (event) => {
@@ -226,7 +242,7 @@ export function useAudioRecording({
       // Start recording with shorter intervals for more responsive transcription
       if (!recorder || recorder.state === 'inactive') {
         console.debug('[Audio Recording] Recorder inactive, attempting to start');
-        recorder.start(1500);
+        recorder.start(1000); // Reduce interval to 1 second for more responsive transcription
         if (recorder.state !== 'recording') {
           throw new Error('Failed to start recording');
         }
