@@ -17,6 +17,7 @@ export default function RecordButton({
   onStop,
   onTranscript,
   onAnalysis,
+  onRecordingStateChange,
 }: RecordButtonProps) {
   const { startRecording: startAudioRecording, stopRecording: stopAudioRecording, error } = useAudioRecording({
     onTranscript,
