@@ -20,7 +20,7 @@
    git commit -m "Initial commit: Real-time conversation analysis tool"
 
    # Add GitHub repository as remote
-   git remote add origin YOUR_GITHUB_REPO_URL
+   git remote add origin https://github.com/thevindu96/relational-ai-therapist.git
 
    # Push code to GitHub
    git push -u origin main
