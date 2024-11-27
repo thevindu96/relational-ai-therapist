@@ -1,6 +1,34 @@
 node_modules
 dist
+build
 .DS_Store
 server/public
 vite.config.ts.*
 *.tar.gz
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor directories and files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Cache directories
+.cache
+.temp
+.vite
+
+# Test coverage
+coverage
